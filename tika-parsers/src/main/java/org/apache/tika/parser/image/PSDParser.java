@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.poi.util.IOUtils;
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.io.EndianUtils;
@@ -265,7 +264,7 @@ public class PSDParser extends AbstractParser {
                             anyBytes = new byte[(int) (extraDataFieldLength - (read - readMarker))];
                             read += stream.read(anyBytes);
                         }
-                        names[layers] = StringEscapeUtils.escapeJava(layerName);
+                        names[layers] = layerName;
                         layers++;
                         continue;
                     }
@@ -287,7 +286,7 @@ public class PSDParser extends AbstractParser {
                         //                    System.out.printf("theRest: %s\n", new String(text));
 
                         // Save this layer's content text
-                        textFields[layers] = StringEscapeUtils.escapeJava(new String(text, "UNICODE"));
+                        textFields[layers] = new String(text, "UNICODE");
 
                     }
                     // *******************************************
@@ -397,7 +396,7 @@ public class PSDParser extends AbstractParser {
                         anyBytes = new byte[(int) (extraDataFieldLength - (read - readMarker))];
                         read += stream.read(anyBytes);
                     }
-                    names[layers] = StringEscapeUtils.escapeJava(layerName);
+                    names[layers] = layerName;
                     layers++;
                     continue;
                 }
@@ -425,14 +424,14 @@ public class PSDParser extends AbstractParser {
             // Consume the rest of the section
 //            read += stream.skip(extraDataFieldLength - (read-readMarker));
 
-            names[layers] = StringEscapeUtils.escapeJava(layerName);
+            names[layers] = layerName;
             layers++;
 
         }
 //        System.out.printf("read: %d, total: %d\n", read, layerInfoSectionSize);
 //        System.out.println("Done with PSD Layers");
         metadata.set(Photoshop.LAYER_NAMES, names);
-        metadata.set("meta:Version", "1.11.meta.7");
+
         // Finally we have Image Data
         // We can't do anything with these parts
 
