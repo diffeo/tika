@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.poi.util.IOUtils;
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.io.EndianUtils;
@@ -151,6 +152,7 @@ public class PSDParser extends AbstractParser {
         for (int i = 0; i < layerCount; i++) {
             textFields[i] = "";
         }
+        String tempString;
         int layers = 0;
 
         short channelCount;
@@ -213,7 +215,7 @@ public class PSDParser extends AbstractParser {
 //            System.out.printf("nameBytes: %s\n", new String(nameBytes));
             // Convert the bytes into string
             String layerName = new String(anyBytes, "UTF-8");
-//            System.out.printf("layerName: %s\n", layerName);
+//            System.out.printf("\n\nlayerName: %s\n", layerName);
 
             // Consume the remainder of the name section
             nameLength = layerName.length() + 1;
@@ -228,12 +230,13 @@ public class PSDParser extends AbstractParser {
             // The additional layer information begins with a 4 byte signature
             read += stream.read(fourBytes);
             keyString = new String(fourBytes, "UTF-8");
+//            System.out.printf("bim8String : %s\n\n", keyString);
 //            System.out.println("additionalLayerInfoSignature: "+additionalLayerInfoSignature);
             if (keyString.equals("8BIM")) {
                 // Get the key for this info -- 4 bytes
                 read += stream.read(fourBytes);
                 keyString = new String(fourBytes, "UTF-8");
-//                System.out.println("infoKey: "+infoKey);
+//                System.out.printf("tyshString: %s\n", keyString);
                 if (keyString.equals("TySh")) {
                     // 4 bytes give size of additional layer info
                     additionalLayerInfoSize = EndianUtils.readIntBE(stream);
@@ -250,22 +253,41 @@ public class PSDParser extends AbstractParser {
                     String additionalData = new String(additionalDataBytes, "UTF-8");
                     tempNumber = additionalData.indexOf("TEXT");
 
+                    // Verify that the given index of text has "TEXT"
+                    fourBytes = Arrays.copyOfRange(additionalDataBytes, tempNumber, tempNumber + 4);
+                    tempString = new String(fourBytes, "UTF-8");
+                    // If we're off the expected path, read all the data and see if we can catch the next layer
+//                    System.out.printf("textString: %s\n\n", tempString);
+                    if (!tempString.equals("TEXT")) {
+                        // We're lost if that string doesn't match "TEXT". We'll skip the remainder of
+                        // this data block. The layer name is still good to save.
+                        if (extraDataFieldLength - (read - readMarker) > 0) {
+                            anyBytes = new byte[(int) (extraDataFieldLength - (read - readMarker))];
+                            read += stream.read(anyBytes);
+                        }
+                        names[layers] = StringEscapeUtils.escapeJava(layerName);
+                        layers++;
+                        continue;
+                    }
+
+
 //                    byte[] textKey = Arrays.copyOfRange(additionalDataBytes, tempNumber, tempNumber+4);
 //                    System.out.printf("textKey: %s\n", new String(textKey));
 
                     // Isolate the bytes which tell us the size of the unicode string
-                    fourBytes = Arrays.copyOfRange(additionalDataBytes, tempNumber+4, tempNumber+8);
+                    fourBytes = Arrays.copyOfRange(additionalDataBytes, tempNumber + 4, tempNumber + 8);
 //                    System.out.printf("textSize: %d\n", EndianUtils.getIntBE(textSize));
 
                     // Get the number of bytes the text spans
-                    textSpan = EndianUtils.getIntBE(fourBytes)*2;
+                    textSpan = EndianUtils.getIntBE(fourBytes) * 2;
 
-                    if (textSpan > 0 && textSpan <= Integer.MAX_VALUE ) {
+                    if (textSpan > 0 && textSpan <= Integer.MAX_VALUE) {
 
-                        byte[] text = Arrays.copyOfRange(additionalDataBytes, tempNumber+8, tempNumber+8+(int)textSpan);
+                        byte[] text = Arrays.copyOfRange(additionalDataBytes, tempNumber + 8, tempNumber + 8 + (int) textSpan);
                         //                    System.out.printf("theRest: %s\n", new String(text));
 
-                        textFields[layers] = new String(text, "UNICODE");
+                        // Save this layer's content text
+                        textFields[layers] = StringEscapeUtils.escapeJava(new String(text, "UNICODE"));
 
                     }
                     // *******************************************
@@ -307,7 +329,8 @@ public class PSDParser extends AbstractParser {
 //                    tempNumber = EndianUtils.readIntBE(stream);
 ////                    System.out.printf("lengthOfClassID: %d\n", tempNumber);
 //                    read += 4;
-//                    if (tempNumber == 0) {
+//                    if (tempNumber == 0) {// If we get here, something is off course. We'll read the remainder
+                    // of the data from this section and try again on the next.
 //                        read += stream.skip(4);
 //                    } else {
 //                        read += stream.skip(tempNumber);
@@ -366,7 +389,28 @@ public class PSDParser extends AbstractParser {
 //                    // variable for descriptor -- 4 bytes to get size, then consume size
 //                    // 4 * 8 bytes for something
 
+                } else {
+                    // If we get here, something is off course. We'll read the remainder
+                    // of the data from this section and try again on the next. At least
+                    // we matched "BIM8" so we can confidently save the layer name.
+                    if (extraDataFieldLength - (read-readMarker) > 0) {
+                        anyBytes = new byte[(int) (extraDataFieldLength - (read - readMarker))];
+                        read += stream.read(anyBytes);
+                    }
+                    names[layers] = StringEscapeUtils.escapeJava(layerName);
+                    layers++;
+                    continue;
                 }
+            } else {
+                // If we get here, something is seriously off course. We'll read the remainder
+                // of the data from this section and try again on the next. It is likely that
+                // the layer name bytes we read is not actually a layer name, so we wont save it.
+                if (extraDataFieldLength - (read-readMarker) > 0) {
+                    anyBytes = new byte[(int) (extraDataFieldLength - (read - readMarker))];
+                    read += stream.read(anyBytes);
+                }
+                layers++;
+                continue;
             }
 
 
@@ -381,17 +425,14 @@ public class PSDParser extends AbstractParser {
             // Consume the rest of the section
 //            read += stream.skip(extraDataFieldLength - (read-readMarker));
 
-            names[layers] = layerName;
+            names[layers] = StringEscapeUtils.escapeJava(layerName);
             layers++;
 
         }
 //        System.out.printf("read: %d, total: %d\n", read, layerInfoSectionSize);
 //        System.out.println("Done with PSD Layers");
-        String csvNames = "";
-        for (String name : names) {
-            csvNames += (name + ",");
-        }
-        metadata.set(Photoshop.LAYER_NAMES, csvNames);
+        metadata.set(Photoshop.LAYER_NAMES, names);
+        metadata.set("meta:Version", "1.11.meta.7");
         // Finally we have Image Data
         // We can't do anything with these parts
 
