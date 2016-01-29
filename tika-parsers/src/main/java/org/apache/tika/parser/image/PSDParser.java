@@ -430,7 +430,9 @@ public class PSDParser extends AbstractParser {
         }
 //        System.out.printf("read: %d, total: %d\n", read, layerInfoSectionSize);
 //        System.out.println("Done with PSD Layers");
-        metadata.set(Photoshop.LAYER_NAMES, names);
+        if(names.length > 0) {
+            metadata.set(Photoshop.LAYER_NAMES, names);
+        }
 
         // Finally we have Image Data
         // We can't do anything with these parts
@@ -438,14 +440,16 @@ public class PSDParser extends AbstractParser {
         // Add the text layer bodies as the body of text
         XHTMLContentHandler xhtml = new XHTMLContentHandler(handler, metadata);
         xhtml.startDocument();
-        xhtml.startElement("p");
-        for (String text : textFields) {
-            if (text.length() > 0) {
-                xhtml.characters(text.toCharArray(), 0, text.toCharArray().length);
-                xhtml.newline();
+        if(textFields.length > 0) {
+            xhtml.startElement("p");
+            for (String text : textFields) {
+                if (text.length() > 0) {
+                    xhtml.characters(text.toCharArray(), 0, text.toCharArray().length);
+                    xhtml.newline();
+                }
             }
+            xhtml.endElement("p");
         }
-        xhtml.endElement("p");
         xhtml.endDocument();
     }
 
