@@ -197,6 +197,11 @@ public class PSDParser extends AbstractParser {
             read += 4;
             readMarker = read;
 
+            // Extra layer of protection, trying to avoid running out of stream
+            if( read + extraDataFieldLength > layerInfoSectionSize + 1) {
+                break;
+            }
+
             // 4 bytes - length of mask/adjustment layer (retrieve and skip)
             maskAdjustmentLength = EndianUtils.readIntBE(stream);
             // 4 bytes - length of layer blending ranges (retrieve and skip)
